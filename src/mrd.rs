@@ -6,6 +6,7 @@ use std::path::Path;
 use core::ops::Range;
 use std::fmt;
 use std::mem::size_of;
+use crate::utils;
 use crate::pe_table::Petable;
 
 /*
@@ -87,18 +88,18 @@ impl Mrd{
         dimension.iter_mut().enumerate()
         .for_each(
             |(idx,i)| match idx {
-                0 => {*i = bytes_to_long(&header_bytes[0..4]);}
-                1 => {*i = bytes_to_long(&header_bytes[4..8]);}
-                2 => {*i = bytes_to_long(&header_bytes[8..12]);}
-                3 => {*i = bytes_to_long(&header_bytes[12..16]);}
-                4 => {*i = bytes_to_long(&header_bytes[152..156]);}
-                5 => {*i = bytes_to_long(&header_bytes[156..160]);}
+                0 => {*i = utils::bytes_to_long(&header_bytes[0..4]);}
+                1 => {*i = utils::bytes_to_long(&header_bytes[4..8]);}
+                2 => {*i = utils::bytes_to_long(&header_bytes[8..12]);}
+                3 => {*i = utils::bytes_to_long(&header_bytes[12..16]);}
+                4 => {*i = utils::bytes_to_long(&header_bytes[152..156]);}
+                5 => {*i = utils::bytes_to_long(&header_bytes[156..160]);}
                 _ => {} //no op
             }
         );
 
         /* Determine data type from header (charcode) */
-        let mut charcode = bytes_to_int(&header_bytes[CHARCODE_BYTES]);
+        let mut charcode = utils::bytes_to_int(&header_bytes[CHARCODE_BYTES]);
         let is_complex = if charcode >= 16 {true} else {false};
         if is_complex {charcode -= 16};
         let charbytes:usize = match charcode{
@@ -227,16 +228,4 @@ impl fmt::Display for Mrd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "dims: {:?}\nn_volumes: {}", self.dimension, self.num_vols)
     }
-}
-
-fn bytes_to_long(byte_slice:&[u8]) -> i32{
-    let mut byte_buff = [0;4];
-    byte_buff.copy_from_slice(&byte_slice);
-    return i32::from_le_bytes(byte_buff);
-}
-
-fn bytes_to_int(byte_slice:&[u8]) -> i16{
-    let mut byte_buff = [0;2];
-    byte_buff.copy_from_slice(byte_slice);
-    return i16::from_le_bytes(byte_buff);
 }

@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path,PathBuf};
 use std::fs::{File,create_dir_all,remove_file};
 use std::io::{Write,Read};
+use crate::slurm::BatchScript;
+use std::process::Command;
 
 #[derive(Deserialize, Serialize)]
-struct VolumeManager {
+pub struct VolumeManager {
     file:String,
     mrd:String,
     phase_table:String,
@@ -47,6 +49,18 @@ impl VolumeManager {
         };
         VolumeManager::to_file(&vm);
         return vm;
+    }
+
+    pub fn is_done(workdir:&str) -> bool{
+        use VmState::*;
+        if VolumeManager::exists(workdir){
+            let vm = VolumeManager::open(workdir);
+            return match vm.state {
+                Done => true,
+                _ => false
+            };
+        }
+        return false;
     }
 
     pub fn open(workdir:&str) -> VolumeManager{
@@ -117,13 +131,6 @@ impl VolumeManager {
         let vm_path = VolumeManager::fpath(workdir);
         return vm_path.exists();
     }
-
-    pub fn remove(workdir:&str){
-        if VolumeManager::exists(workdir){
-            remove_file(VolumeManager::fpath(workdir)).expect("problem occured trying to delete file");
-        }
-    }
-
 }
 
 pub fn launch_volume_manager(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str){
@@ -142,6 +149,24 @@ pub fn launch_volume_manager(workdir:&str,mrd:&str,phase_table:&str,vol_offset:u
         }
     }
 }
+
+pub fn launch_volume_manager_slurm(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
+    let wp = Path::new(&workdir);
+    let mut cmd = Command::new("/home/wa41/cs_recon_test/cs_reco");
+    cmd.arg("volume-manager");
+    cmd.arg(workdir);
+    cmd.arg(&mrd);
+    cmd.arg(phase_table);
+    cmd.arg(vol_offset.to_string());
+    cmd.arg(bart_settings_file);
+    let cmd = format!("{:?}",cmd);
+    let mut j = BatchScript::new(&format!("slurm_job"));
+    j.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
+    j.commands.push("hostname".to_string());
+    j.commands.push(cmd);
+    return j.submit(&workdir);
+}
+
 
 #[test]
 fn test(){

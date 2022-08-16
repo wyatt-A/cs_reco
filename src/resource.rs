@@ -3,6 +3,7 @@ use std::process::Command;
 use std::{path::Path, io::Read};
 use std::fs::{File,self};
 use serde::{Deserialize, Serialize};
+use crate::volume_index::VolumeIndex;
 
 #[derive(Serialize,Deserialize,Debug,Hash,Eq,Clone)]
 pub struct Resource{
@@ -17,7 +18,6 @@ impl std::cmp::PartialEq<Resource> for Resource {
         other.src == self.src &&
         other.dest == self.dest &&
         other.host == self.host
-        // omitting state
     }
 }
 
@@ -47,7 +47,6 @@ impl Host{
     }
 }
 
- 
 impl ResourceList{
 
     pub fn open(work_dir:&str) -> ResourceList {
@@ -115,7 +114,6 @@ impl ResourceList{
         }
     }
 }
-
 
 impl Resource{
     pub fn new(source:&str,destination:&str) -> Resource{
@@ -196,16 +194,34 @@ impl Resource{
         cmd.arg(src);
         cmd.arg(&self.dest);
 
-        // check that dest exists.
         let p = Path::new(&self.dest);
         if !p.exists() {fs::create_dir_all(p).expect("failed to create directory");}
-        println!("{:?}",cmd);
         let r = cmd.spawn().expect("failed to launch cp command");
         let o = r.wait_with_output().expect("failed to wait for execution");
         if o.status.success() {self.state = RState::Succeeded}
     }
 }
 
+
+pub fn sync_raw_from_remote_host(local_workdir:&str,remote_vol_index_path:&str,remote_host:&Host)
+-> ResourceList
+{
+    let vol_prefix = "m";
+    let mut vol_index = Resource::new(remote_vol_index_path,local_workdir);
+    vol_index.set_remote_host(remote_host);
+    vol_index.update(false);   
+    let vhash = VolumeIndex::read_ready(&vol_index.local_path());
+    let mut r = ResourceList::open(local_workdir);
+    r.set_host(remote_host);
+    for (key, value) in vhash.into_iter() {
+        let src_path = Path::new(remote_vol_index_path).with_file_name(&key).into_os_string().into_string().unwrap();
+        let mut dest = vol_prefix.to_string();
+        dest.push_str(&value);
+        r.try_add(Resource::new(&src_path,&dest));
+    }
+    r.start_transfer();
+    return r;
+}
 
 
 #[test]
@@ -220,7 +236,7 @@ fn test(){
     let vol_index_local = false;
     vol_index.set_remote_host(&scanner);
     vol_index.update(vol_index_local);   
-    let vhash = VolumeIndex::read(&vol_index.local_path());
+    let vhash = VolumeIndex::read_ready(&vol_index.local_path());
     let mut r = ResourceList::open(workdir);
     r.set_host(&scanner);
     for (key, value) in vhash.into_iter() {

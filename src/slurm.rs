@@ -145,6 +145,15 @@ impl BatchScript{
 
 }
 
+pub fn is_running(job_id:u32){
+    let mut cmd = Command::new("squeue");
+    cmd.arg("-j");
+    cmd.arg(job_id.to_string());
+    let r = cmd.spawn().unwrap();
+    let o =r.wait_with_output().unwrap();
+    println!("{:?}",o.stdout);
+}
+
 #[test]
 fn test(){
     let cmd = "scp mrs@stejskal:/d/smis/N20220811_00/_03_MGRE/mgre.mrd /home/wa41".to_string();
