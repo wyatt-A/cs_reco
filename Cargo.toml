@@ -9,3 +9,4 @@ byteorder = "1.4.3"
 toml = "0.5.9"
 serde = { version = "1.0", features = ["derive"] }
 whoami = "1.2.1"
+regex = "1.6.0"

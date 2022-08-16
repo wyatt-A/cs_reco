@@ -20,7 +20,7 @@ pub fn mrd_to_cfl(mrd:&str,vol_index:&str,petable:&str,table_size:&str,cfl:&str)
     let mut mrd = Mrd::new(mrd);
     println!("found raw dims: {:?}",mrd.dimension);
     mrd.load_volume(vidx);
-    let petab = Petable::new(petable,pesize);
+    let petab = Petable::new(petable);
     mrd.write_zero_filled_cfl(cfl,&petab);
 }
 

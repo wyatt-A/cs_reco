@@ -125,13 +125,22 @@ pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,bart_pics_settings:&str){
     let mut cmd = Command::new(settings.bart_binary);
     let scale = if settings.respect_scaling { "-S" } else { "" };
     let debug = if settings.debug {"-d5"} else {""};
-    cmd.arg("pics");
-    cmd.arg(format!("-{}",settings.algorithm));
-    cmd.arg(format!("-r{}",settings.regularization));
-    cmd.arg(format!("-i{}",settings.max_iter));
-    cmd.arg(scale);
-    cmd.arg(debug);
+    // cmd.arg("pics");
+    // cmd.arg(format!("-{}",settings.algorithm));
+    // cmd.arg(format!("-r{}",settings.regularization));
+    // cmd.arg(format!("-i{}",settings.max_iter));
+    // cmd.arg(scale);
+    // cmd.arg(debug);
+    // cmd.arg(kspace_cfl).arg(&settings.coil_sensitivity).arg(img_cfl);
+
+    cmd.arg("normalize");
+    //cmd.arg(format!("-{}",settings.algorithm));
+    //cmd.arg(format!("-r{}",settings.regularization));
+    //cmd.arg(format!("-i{}",settings.max_iter));
+    //cmd.arg(scale);
+    //cmd.arg(debug);
     cmd.arg(kspace_cfl).arg(&settings.coil_sensitivity).arg(img_cfl);
+
     println!("{:?}",cmd);
     let proc = cmd.spawn().expect("failed to launch bart pics");
     let results = proc.wait_with_output().expect("failed to wait on output");

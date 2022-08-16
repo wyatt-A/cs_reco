@@ -23,8 +23,8 @@ impl std::cmp::PartialEq<Resource> for Resource {
 
 #[derive(Serialize,Deserialize,Debug)]
 pub struct ResourceList{
-    workdir:String,
-    item:Vec<Resource>,
+    pub workdir:String,
+    pub item:Vec<Resource>,
     host:Option<Host>
 }
 
@@ -76,7 +76,7 @@ impl ResourceList{
         f.write_all(s.as_bytes()).expect("trouble writing to file");
     }
 
-    pub fn add_resource(&mut self,res:Resource){
+    pub fn try_add(&mut self,res:Resource){
         // add resource if it doesn't already exist in the collection
         // note** we're not using a hash here because we cant serialize it
         let mut res = res;
@@ -132,6 +132,10 @@ impl Resource{
         let dp = Path::new(&self.dest);
         let fname = sp.file_name().unwrap();
         return dp.join(fname).into_os_string().into_string().unwrap();
+    }
+
+    pub fn local_dir(&self) -> String {
+        return self.dest.clone();
     }
 
     pub fn set_remote_host(&mut self,host:&Host){
@@ -224,7 +228,7 @@ fn test(){
         let mut dest = vol_prefix.to_string();
         dest.push_str(&value);
         // if a resource has already been added, it will not be added again despite the method call
-        r.add_resource(Resource::new(&src_path,&dest));
+        r.try_add(Resource::new(&src_path,&dest));
     }
     r.start_transfer();
 }
