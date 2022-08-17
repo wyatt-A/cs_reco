@@ -150,7 +150,7 @@ pub fn launch_volume_manager(workdir:&str,mrd:&str,phase_table:&str,vol_offset:u
     }
 }
 
-pub fn launch_volume_manager_slurm(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
+pub fn launch_volume_manager_job(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
     let wp = Path::new(&workdir);
     let mut cmd = Command::new("/home/wa41/cs_recon_test/cs_reco");
     cmd.arg("volume-manager");

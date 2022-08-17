@@ -94,12 +94,13 @@ impl ResourceList{
         return ResourceList { item:Vec::<Resource>::new(),host:None,workdir:work_dir.to_string() };
     }
 
-    pub fn set_host(&mut self,host:&Host){
+    pub fn set_host(&mut self,host:&Host) -> &mut Self{
         self.host = Some(host.clone());
         self.item.iter_mut().for_each(|item| {
             item.set_host(self.host.clone());
         });
         self.update_file();
+        return self;
     }
 
     pub fn start_transfer(&mut self){
@@ -204,12 +205,12 @@ impl Resource{
 
 
 pub fn sync_raw_from_remote_host(local_workdir:&str,remote_vol_index_path:&str,remote_host:&Host)
--> ResourceList
+-> (Resource,ResourceList)
 {
     let vol_prefix = "m";
     let mut vol_index = Resource::new(remote_vol_index_path,local_workdir);
     vol_index.set_remote_host(remote_host);
-    vol_index.update(false);   
+    vol_index.update(false);
     let vhash = VolumeIndex::read_ready(&vol_index.local_path());
     let mut r = ResourceList::open(local_workdir);
     r.set_host(remote_host);
@@ -220,7 +221,7 @@ pub fn sync_raw_from_remote_host(local_workdir:&str,remote_vol_index_path:&str,r
         r.try_add(Resource::new(&src_path,&dest));
     }
     r.start_transfer();
-    return r;
+    return (vol_index,r);
 }
 
 

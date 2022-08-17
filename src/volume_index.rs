@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::{Path,PathBuf};
 use std::collections::HashMap;
 use std::fs::File;
+use crate::resource::{Resource,Host};
 
 pub struct VolumeIndex{
 
@@ -41,6 +42,13 @@ impl VolumeIndex{
         let mut strbuff = String::new();
         f.read_to_string(&mut strbuff).expect("problem reading file");
         return strbuff;
+    }
+
+    pub fn fetch_from(remote_path:&str,remote_host:&Host,destination:&str) -> String{
+        let mut r = Resource::new(remote_path,destination);
+        r.set_remote_host(remote_host);
+        r.update(false);
+        return r.local_path();
     }
 
 }

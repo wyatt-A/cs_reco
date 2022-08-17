@@ -3,6 +3,16 @@ use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::File;
 
+#[derive(PartialEq,Eq)]
+pub enum JobState {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+    Unknown,
+}
+
 pub struct SBatchOpts{
     reservation:String,
     job_name:String,
@@ -152,6 +162,20 @@ pub fn is_running(job_id:u32){
     let r = cmd.spawn().unwrap();
     let o =r.wait_with_output().unwrap();
     println!("{:?}",o.stdout);
+}
+
+pub fn get_job_state(job_id:u32) -> JobState {
+    let mut cmd = Command::new("sacct");
+    cmd.arg("-j").arg(job_id.to_string()).arg("--format").arg("state");
+    let o = cmd.output().unwrap();
+    let s = std::str::from_utf8(&o.stdout).unwrap().to_ascii_lowercase();
+    return match s.as_str() {
+        "pending" => JobState::Pending,
+        "cancelled" => JobState::Cancelled,
+        "failed" => JobState::Failed,
+        "running" => JobState::Running,
+        _ => JobState::Unknown,
+    }
 }
 
 #[test]
