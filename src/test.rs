@@ -8,66 +8,21 @@ use crate::volume_manager::{VolumeManager,launch_volume_manager,launch_volume_ma
 use crate::slurm::{self,BatchScript, JobState};
 use std::process::Command;
 
-pub fn main_test_local(){
-    let mut bart_settings = BartPicsSettings::quick();
-    bart_settings.set_bart_binary("/Users/wyatt/build/bart-0.7.00/bart");
-    let bart_settings_file = "/Users/wyatt/local_recon/reco_settings";
-    let scanner = Host::new("mrs","stejskal");
-    let workdir = "/Users/wyatt/local_recon";
-
-    let cwd = Path::new(workdir);
-    if !cwd.exists(){ create_dir_all(cwd).expect("unable to create specified working directory")}
-    
-
-    let ptab = "/Users/Wyatt/cs_recon/test_data/petableCS_stream/stream_CS256_8x_pa18_pb54";
-
-    let vpath = "/d/smis/N20220816_00/_01_46_3b0/volume_index.txt";
-
-    let mrd_vol_offset = 0;
-
-    bart_settings.to_file(bart_settings_file);
-
-    let (vidx,vols) = sync_raw_from_remote_host(workdir,vpath,&scanner);
-
-    vols.item.iter().for_each(|item| {
-        let mrd = item.local_path();
-        let volworkdir = item.local_dir();
-        let p = Path::new(&volworkdir);
-        println!("{:?}",p.file_name());
-        if  !VolumeManager::is_done(&volworkdir){
-            launch_volume_manager(
-                &volworkdir,
-                &mrd,
-                ptab,
-                mrd_vol_offset,
-                bart_settings_file
-            );
-        }else{
-            println!("volume manager is finished with work");
-        }
-    });
-
-}
-
 
 pub fn main_test_cluster(){
-
-    //for _ in 0..0{
 
     let mut bart_settings = BartPicsSettings::quick();
     bart_settings.set_bart_binary("/cm/shared/apps/bart/usr/bin/bart");
     let bart_settings_file = "/privateShares/wa41/cs_recon_test/reco_settings";
     let scanner = Host::new("mrs","stejskal");
     let workdir = Path::new("/privateShares/wa41/cs_recon_test/local_recon");
+    let ptab = "/home/wa41/cs_recon_test/stream_CS256_8x_pa18_pb54";
+    let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
     
     let cwd = Path::new(workdir);
     if !cwd.exists(){ create_dir_all(cwd).expect("unable to create specified working directory")}
     
     let volman_jobs_file = cwd.join("volman_jobs").with_extension("toml");
-
-    let ptab = "/home/wa41/cs_recon_test/stream_CS256_8x_pa18_pb54";
-    
-    let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
 
     let mrd_vol_offset = 0;
     
@@ -150,7 +105,6 @@ pub fn main_test_cluster(){
     utils::write_to_file(volman_jobs_file.to_str().unwrap(),"toml",&vol_man_jobs_str);
     
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    //}
 
 }
     

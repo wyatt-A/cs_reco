@@ -4,7 +4,7 @@
 */
 
 use cs_reco::volume_manager::launch_volume_manager;
-use cs_reco::test::{main_test_cluster,main_test_local};
+use cs_reco::test::{main_test_cluster};
 use clap::Parser;
 
 /*
@@ -57,9 +57,6 @@ fn main(){
         }
         "cluster-test" => {
             main_test_cluster();
-        },
-        "local-test" => {
-            main_test_local();
         },
         _ => println!("sub-command not recognized")
     }
