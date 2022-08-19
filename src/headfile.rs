@@ -1,24 +1,33 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path,PathBuf};
 
 pub struct Headfile{
-    file:File
+    items:HashMap<String,String>
 }
 
 impl Headfile{
-    pub fn from_mrd_meta(filename:&str) -> Headfile{
-        let f = File::open(&Path::new(filename)).expect("cannot open file");
-        return Headfile{file:f};
+    pub fn from_mrd_meta(mrd_meta_file:&Path) -> Headfile{
+        let mut f = File::open(mrd_meta_file).expect("cannot open file");
+        let mut strbuff = String::new();
+        f.read_to_string(&mut strbuff).expect("trouble reading file");
+        return Headfile{items:Headfile::txt_to_hash(strbuff)}
     }
 
-    pub fn write_headfile(&mut self,filename:&str){
-        let path = Path::new(filename);
-        let mut f = File::create(path).expect("cannot create file");
-        let hf = self.to_hash_map();
+    pub fn append_field<T,U>(&mut self,key:T,value:U)
+    where T:std::string::ToString, U:std::string::ToString
+    {
+        let old_val = self.items.insert(key.to_string(),value.to_string());
+        if old_val.is_some(){
+            println!("value {} updated to {}",old_val.unwrap(),value.to_string());
+        }
+    }
+
+    pub fn write_headfile(&self,headfile:&Path){
+        let mut f = File::create(headfile).expect("cannot create file");
         let mut strbuf = String::new();
-        for (key, val) in hf.iter() {
+        for (key, val) in self.items.iter() {
             strbuf.push_str(key);
             strbuf.push('=');
             strbuf.push_str(val);
@@ -27,11 +36,22 @@ impl Headfile{
         f.write_all(strbuf.as_bytes()).expect("problem writing to file");
     }
 
-    pub fn to_hash_map(&mut self) -> HashMap<String,String>{
+    // pub fn to_hash_map(&mut self) -> HashMap<String,String>{
+    //     let mut rawstr = String::new();
+    //     self.file.read_to_string(&mut rawstr).expect("problem reading file");
+    //     return Headfile::txt_to_hash(rawstr);
+    // }
+
+    pub fn to_hash(headfile:PathBuf) -> HashMap<String,String>{
+        let mut f = File::open(headfile).expect("cannot open file");
+        let mut strbuff = String::new();
+        f.read_to_string(&mut strbuff).expect("issue reading file");
+        return Headfile::txt_to_hash(strbuff);
+    }
+
+    pub fn txt_to_hash(headfile_str:String) -> HashMap<String,String>{
         let mut hf = HashMap::<String,String>::new();
-        let mut rawstr = String::new();
-        self.file.read_to_string(&mut rawstr).expect("problem reading file");
-        rawstr.lines().for_each(|line|{
+        headfile_str.lines().for_each(|line|{
             // split on the first = we find
             match line.find("="){
                 Some(index) => {
@@ -91,10 +111,12 @@ fn transcribe_string(hash:&mut HashMap<String,String>,old_name:&str,new_name:&st
     }
 }
 
-// #[test]
-// fn test_make_headfile() {
-//     let test_file = "/home/waustin/mrs_test_data/test_data/N20220728_00/_02_ICO61_6b0/220728T16_m00_meta.txt";
-//     //load_mrs_meta();
-//     let mut hf = Headfile::from_mrd_meta(test_file);
-//     hf.write_headfile("out.headfile");
-// }
+#[test]
+fn test_make_headfile() {
+    let test_file = "/Users/Wyatt/cs_recon/test_data/N20220808_00/_02_ICO61_6b0/220808T12_m00_meta.txt";
+    let headfile = "test.headfile";
+    let mut hf = Headfile::from_mrd_meta(&Path::new(test_file));
+    hf.write_headfile(Path::new(headfile));
+    hf.append_field("DUMMYFIELD",6.5);
+    hf.write_headfile(&Path::new(test_file));
+}
