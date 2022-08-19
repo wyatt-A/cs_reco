@@ -2,8 +2,9 @@ use std::io::{Write, Read};
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::File;
+use crate::utils;
 
-#[derive(PartialEq,Eq)]
+#[derive(PartialEq,Eq,Debug,Clone)]
 pub enum JobState {
     Pending,
     Running,
@@ -164,18 +165,30 @@ pub fn is_running(job_id:u32){
     println!("{:?}",o.stdout);
 }
 
-pub fn get_job_state(job_id:u32) -> JobState {
+pub fn get_job_state(job_id:u32,n_tries:u16) -> JobState {
     let mut cmd = Command::new("sacct");
     cmd.arg("-j").arg(job_id.to_string()).arg("--format").arg("state");
     let o = cmd.output().unwrap();
     let s = std::str::from_utf8(&o.stdout).unwrap().to_ascii_lowercase();
-    return match s.as_str() {
+    let lines:Vec<&str> = s.lines().collect();
+    let mut statestr = lines[lines.len()-1];
+    statestr = statestr.trim();
+    return match statestr {
         "pending" => JobState::Pending,
         "cancelled" => JobState::Cancelled,
         "failed" => JobState::Failed,
         "running" => JobState::Running,
-        _ => JobState::Unknown,
-    }
+        "completed" => JobState::Completed,
+        _ => {
+            if n_tries > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                return get_job_state(job_id,n_tries-1);
+            }else{
+                println!("gave up waiting for job state for job id: {}",job_id);
+                return JobState::Unknown;
+            }
+        }
+    };
 }
 
 #[test]

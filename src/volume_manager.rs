@@ -152,7 +152,9 @@ pub fn launch_volume_manager(workdir:&str,mrd:&str,phase_table:&str,vol_offset:u
 
 pub fn launch_volume_manager_job(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
     let wp = Path::new(&workdir);
-    let mut cmd = Command::new("/home/wa41/cs_recon_test/cs_reco");
+    let this_executable = std::env::current_exe().expect("failed to resolve this exe path");
+    let mut cmd = Command::new(this_executable.to_str().unwrap());
+    // we are giving the sbatch file our identity to call ourself
     cmd.arg("volume-manager");
     cmd.arg(workdir);
     cmd.arg(&mrd);
@@ -160,11 +162,11 @@ pub fn launch_volume_manager_job(workdir:&str,mrd:&str,phase_table:&str,vol_offs
     cmd.arg(vol_offset.to_string());
     cmd.arg(bart_settings_file);
     let cmd = format!("{:?}",cmd);
-    let mut j = BatchScript::new(&format!("slurm_job"));
-    j.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
-    j.commands.push("hostname".to_string());
-    j.commands.push(cmd);
-    return j.submit(&workdir);
+    let mut job = BatchScript::new(&format!("slurm-job"));
+    job.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
+    job.commands.push(cmd);
+    let job_id = job.submit(&workdir);
+    return job_id;
 }
 
 

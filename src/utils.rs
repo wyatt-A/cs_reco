@@ -35,3 +35,12 @@ pub fn bytes_to_int(byte_slice:&[u8]) -> i16{
     byte_buff.copy_from_slice(byte_slice);
     return i16::from_le_bytes(byte_buff);
 }
+
+pub fn trim_newline(s: &mut String) {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+}
