@@ -1,3 +1,8 @@
+/*
+    cs_recon main is the entry point for the civm reconstruction pipeline that is using BART under
+    the hood.
+*/
+
 use cs_reco::volume_manager::launch_volume_manager;
 use cs_reco::test::{main_test_cluster,main_test_local};
 use clap::Parser;
