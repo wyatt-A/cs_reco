@@ -118,6 +118,7 @@ impl ResourceList{
 
 impl Resource{
     pub fn new(source:&str,destination:&str) -> Resource{
+        let s = source.to_string();
         return Resource {
             src: source.to_string(),
             dest: destination.to_string(),
@@ -165,7 +166,6 @@ impl Resource{
             RState::Succeeded => {
                 println!("fetch already succeeded. use update to update file from other another location");
             },
-            
         }
     }
 
@@ -194,7 +194,6 @@ impl Resource{
         }
         cmd.arg(src);
         cmd.arg(&self.dest);
-
         let p = Path::new(&self.dest);
         if !p.exists() {fs::create_dir_all(p).expect("failed to create directory");}
         let r = cmd.spawn().expect("failed to launch cp command");
@@ -248,4 +247,18 @@ fn test(){
         r.try_add(Resource::new(&src_path,&dest));
     }
     r.start_transfer();
+}
+
+#[test]
+fn test_01(){
+    let scanner = Host::new("mrs","stejskal");
+    let workdir = "C:/Users/waust/OneDrive/Desktop/cs_reco";
+    let mut rl = ResourceList::open(workdir);
+    rl.set_host(&scanner);
+    let src = "/d/smis/recon_test_data/_01_46_3b0/220816T11_m01_meta.txt";
+    let dest = "home";
+    let r = Resource::new(src,dest);
+    rl.try_add(r);
+    rl.start_transfer();
+    println!("{:?}",rl.item[0].src);
 }

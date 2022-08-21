@@ -97,26 +97,29 @@ impl BartPicsSettings{
     }
 
     pub fn set_unit_sens_from_cfl(&mut self,cfl:&str){
+        let cfl_path = Path::new(cfl);
         let p_in = Path::new(cfl).with_extension("").to_owned();
         let mut coil_sens = p_in.clone();
         let mut name = coil_sens.file_name().unwrap().to_str().unwrap().to_string();
         name.push_str("_sens");
         coil_sens = coil_sens.with_file_name(name);
-        let dims = cfl::get_dims(cfl);
+        let dims = cfl::get_dims(&cfl_path);
         self.set_unit_coil_sens(coil_sens.to_str().unwrap(),dims);
     }
 }
 
 pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,bart_pics_settings:&str){
 
+    let kspace_cfl_path = Path::new(&kspace_cfl);
+    
     let mut settings = BartPicsSettings::from_file(bart_pics_settings);
-
+    let sens_path = Path::new(&settings.coil_sensitivity);
     // reference coil sensitivity data if exist and is correct, make fresh if otherwise
     if settings.coil_sensitivity.is_empty(){
         settings.set_unit_sens_from_cfl(kspace_cfl);
     }else {
-        let sens_dims = cfl::get_dims(&settings.coil_sensitivity);
-        let kspace_dims = cfl::get_dims(kspace_cfl);
+        let sens_dims = cfl::get_dims(sens_path);
+        let kspace_dims = cfl::get_dims(kspace_cfl_path);
         if sens_dims != kspace_dims{
             settings.set_unit_sens_from_cfl(kspace_cfl);
         }

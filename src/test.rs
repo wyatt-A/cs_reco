@@ -15,32 +15,38 @@ pub fn main_test_cluster(){
     bart_settings.set_bart_binary("/cm/shared/apps/bart/usr/bin/bart");
     let bart_settings_file = "/privateShares/wa41/cs_recon_test/reco_settings";
     let scanner = Host::new("mrs","stejskal");
-    let workdir = Path::new("/privateShares/wa41/cs_recon_test/local_recon");
+    let runno = "testrunno";
+    let big_disk = "/privateShares/wa41/cs_recon_test";
     let ptab = "/home/wa41/cs_recon_test/stream_CS256_8x_pa18_pb54";
     let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
+    let mrd_meta_suffix = "_meta.txt";
     
-    let cwd = Path::new(workdir);
-    if !cwd.exists(){ create_dir_all(cwd).expect("unable to create specified working directory")}
+    let base_dir = Path::new(big_disk);
+    let cwd = base_dir.join(format!("{}.work",runno));
+    if !cwd.exists(){ create_dir_all(&cwd).expect("unable to create specified working directory")}
     
-    let volman_jobs_file = cwd.join("volman_jobs").with_extension("toml");
+    let volman_jobs_file = cwd.join("volume-manager-jobs").with_extension("toml");
 
     let mrd_vol_offset = 0;
     
     bart_settings.to_file(bart_settings_file);
 
     let raw_base_path = Path::new(vpath).parent().unwrap();
-    let local_raw_path = Path::new(workdir).join("raw");
-    if !local_raw_path.exists(){ create_dir_all(&local_raw_path).expect("issue creating directory"); }
+    let local_raw_path = Path::new(&cwd).join("raw");
+    if !local_raw_path.exists(){create_dir_all(&local_raw_path).expect("issue creating directory");}
     
-    let local_vpath = VolumeIndex::fetch_from(vpath,&scanner,workdir.to_str().unwrap());
+    let local_vpath = VolumeIndex::fetch_from(vpath,&scanner,cwd.to_str().unwrap());
     let ready_mrds = VolumeIndex::read_ready(&local_vpath);
     let all_mrds = VolumeIndex::read_all(&local_vpath);
 
     let mut r = ResourceList::open(local_raw_path.to_str().unwrap());
     r.set_host(&scanner);
     ready_mrds.iter().for_each(|(mrd,_)| {
-        let srcpath = Path::new(raw_base_path).join(mrd);
-        r.try_add(Resource::new(srcpath.to_str().unwrap(),""));
+        let mrdname = Path::new(mrd).file_stem().unwrap().to_str().unwrap();
+        let mrd_srcpath = Path::new(raw_base_path).join(mrd);
+        let meta_srcpath = Path::new(raw_base_path).join(format!("{}{}",mrdname,mrd_meta_suffix));
+        r.try_add(Resource::new(mrd_srcpath.to_str().unwrap(),""));
+        r.try_add(Resource::new(meta_srcpath.to_str().unwrap(),""));
     });
     r.start_transfer();
 
@@ -68,13 +74,13 @@ pub fn main_test_cluster(){
     // each mrd gets a volume manager and a job id if they exist
     // the job ids are saved before this program quits
     all_mrds.iter().for_each(|(index,mrd)| {
-        let voldir = workdir.join(index);
+        let voldir = cwd.join(index);
         if !voldir.exists(){create_dir_all(&voldir).expect("issue creating directory");}
         if !VolumeManager::exists(voldir.to_str().unwrap()) && mrd.is_some(){
             println!("vol man doesn't exist and mrd is available... submitting new job");
             println!("{:?}",voldir);
             let mrd_path = local_raw_path.join(mrd.clone().unwrap());
-            let job_id = launch_volume_manager_job(voldir.to_str().unwrap(),mrd_path.to_str().unwrap(),&ptab,mrd_vol_offset,&bart_settings_file);
+            let job_id = launch_volume_manager_job(voldir.to_str().unwrap(),runno,mrd_path.to_str().unwrap(),&ptab,mrd_vol_offset,&bart_settings_file);
             vol_man_jobs.insert(voldir.clone(),job_id);
         }
     });
@@ -88,22 +94,25 @@ pub fn main_test_cluster(){
     });
     //println!("submitted job states: {:?}",job_states);
 
-    // restart volume managers that have not finished but are not actively running
-    // job_states.iter().for_each(|(vol,state)|{
-    //     if *state == JobState::Completed && !VolumeManager::is_done(vol.to_str().unwrap()){
-    //         // get mrd for this vol manager
-    //         let mrd = all_mrds.get(vol.clone().to_str().unwrap()).unwrap().clone().unwrap();
-    //         // relaunch the vol manager and get a new job id
-    //         let job_id = launch_volume_manager_job(vol.to_str().unwrap(),&mrd,&ptab,mrd_vol_offset,&bart_settings_file);
-    //         // update list of job ids
-    //         vol_man_jobs.insert(vol.clone(),Some(job_id));
-    //     }
-    // });
+    //restart volume managers that have not finished but are not actively running
+    job_states.iter().for_each(|(vol,state)|{
+        if *state == JobState::Completed && !VolumeManager::is_done(vol.to_str().unwrap()){
+            // get mrd for this vol manager
+            println!("need to restart {:?}",vol);
+            let volnum = vol.file_name().unwrap().to_str().unwrap();
+            let mrd = all_mrds.get(volnum).unwrap().clone().unwrap();
+            // relaunch the vol manager and get a new job id
+            let mrd_path = local_raw_path.join(mrd);
+            let job_id = launch_volume_manager_job(vol.clone().to_str().unwrap(),runno,mrd_path.to_str().unwrap(),&ptab,mrd_vol_offset,&bart_settings_file);
+            // update list of job ids
+            vol_man_jobs.insert(vol.clone(),job_id);
+        }
+    });
 
     let vol_man_jobs_str = toml::to_string(&vol_man_jobs).expect("cannot serialize hash");
     println!("writing vol man jobs to file ... {}",vol_man_jobs_str);
     utils::write_to_file(volman_jobs_file.to_str().unwrap(),"toml",&vol_man_jobs_str);
     
-    std::thread::sleep(std::time::Duration::from_millis(2000));
+    //std::thread::sleep(std::time::Duration::from_millis(2000));
 }
     
