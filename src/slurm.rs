@@ -2,7 +2,6 @@ use std::io::{Write, Read};
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::File;
-use crate::utils;
 
 #[derive(PartialEq,Eq,Debug,Clone)]
 pub enum JobState {
@@ -24,7 +23,6 @@ pub struct SBatchOpts{
 pub struct BatchScript{
     preamble:String,
     pub options:SBatchOpts,
-    //bash_file:String,
     pub commands:Vec<String>,
     pub job_id:Option<u32>
 }
@@ -76,8 +74,6 @@ impl BatchScript{
     pub fn write(&self,location:&str) -> PathBuf{
         let mut fname = Path::new(location).to_owned();
         fname = fname.join(&self.options.job_name).with_extension("bash");
-        //fname = fname.with_file_name(&self.options.job_name).with_extension("bash");
-        println!("{:?}",fname);
         let mut f = File::create(&fname).expect("cannot create file");
         f.write_all(self.print().as_bytes()).expect("trouble writing to file");
         return fname;
@@ -89,10 +85,8 @@ impl BatchScript{
         cmd.arg(path);
         let o = cmd.output().expect("failed to run command");
         let response = String::from_utf8_lossy(&o.stdout);
-        //println!("err::{}",String::from_utf8_lossy(&o.stderr));
-        //println!("out::{}",String::from_utf8_lossy(&o.stdout));
         let jid = BatchScript::response_to_job_id(&response);
-        println!("job id: {}",jid);
+        //println!("job id: {}",jid);
         self.job_id = Some(jid);
         return jid;
     }

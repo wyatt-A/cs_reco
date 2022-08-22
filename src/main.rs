@@ -2,7 +2,7 @@
     cs_recon main is the entry point for the civm reconstruction pipeline that is using BART under
     the hood.
 */
-use cs_reco::volume_manager::launch_volume_manager;
+use cs_reco::volume_manager::{launch_volume_manager,re_launch_volume_manager};
 use cs_reco::test::{main_test_cluster};
 use clap::Parser;
 
@@ -31,6 +31,13 @@ struct VolumeManagerArgs{
     bart_settings_file:String
 }
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct VolumeManagerRelaunchArgs{
+    parent:String,
+    working_directory:String,
+}
+
 /*
     Mrd to cfl args
 */
@@ -56,6 +63,10 @@ fn main(){
                 &a.bart_settings_file
             );
         }
+        "volume-manager-relaunch" => {
+            let a = VolumeManagerRelaunchArgs::parse();
+            re_launch_volume_manager(&a.working_directory);
+        },
         "cluster-test" => {
             main_test_cluster();
         },

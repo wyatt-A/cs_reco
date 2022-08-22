@@ -9,8 +9,9 @@ use crate::slurm::BatchScript;
 use std::process::Command;
 use std::error::Error;
 use crate::cfl;
+use crate::headfile::Headfile;
 
-const volume_manger_filename:&str = "volume-manager";
+const VOLUME_MANAGER_FILENAME:&str = "volume-manager";
 
 #[derive(Deserialize, Serialize)]
 pub struct VolumeManager {
@@ -25,8 +26,9 @@ pub struct VolumeManager {
     imspace:Option<String>,
 }
 
-#[derive(Deserialize, Serialize,Clone,PartialEq,Eq)]
-enum VmState {
+#[derive(Deserialize, Serialize,Clone,PartialEq,Eq,Debug)]
+pub enum VmState {
+    NotInstantiated,
     Idle,
     PreProcessing,
     Reconstructing,
@@ -46,7 +48,7 @@ impl VolumeManager {
         if VolumeManager::exists(workdir){
             return VolumeManager::advance(workdir);
         }
-        let vm_path = Path::new(workdir).join(volume_manger_filename).with_extension("toml");
+        let vm_path = Path::new(workdir).join(VOLUME_MANAGER_FILENAME).with_extension("toml");
         let vm_path_str = vm_path.into_os_string().into_string().unwrap();
         let vm = VolumeManager{
             file:vm_path_str,
@@ -75,9 +77,19 @@ impl VolumeManager {
         return false;
     }
 
+    pub fn state(workdir:&str) -> VmState{
+        use VmState::*;
+        if VolumeManager::exists(workdir){
+            let vm = VolumeManager::open(workdir);
+            return vm.state
+        }else{
+            return NotInstantiated
+        }
+    }
+
     pub fn open(workdir:&str) -> VolumeManager{
-        let vm_path = Path::new(workdir).join(volume_manger_filename).with_extension("toml");
-        let mut f = File::open(vm_path).expect("cannot open file");
+        let vm_path = Path::new(workdir).join(VOLUME_MANAGER_FILENAME).with_extension("toml");
+        let mut f = File::open(vm_path).expect("cannot open volume manager that doesn't yet exist");
         let mut sbuf = String::new();
         f.read_to_string(&mut sbuf).expect("problem reading file");
         return toml::from_str(&sbuf).expect("cannot deserialize volume manager. File may be corrupt");
@@ -158,13 +170,25 @@ impl VolumeManager {
                                     cfl::to_civm_raw_u16(&cfl,&outdir,&imgname,"t9imx",scale_info.scale_factor);
                                     vm.advance_state();
                                 }
-                                Err(error) => {/* do nothing and run again later */},
+                                Err(_) => {/* do nothing. Will need to run again later when data is available*/},
                             };
                         }
                     },
                 };
+                let mrd_meta = Path::new(&vm.mrd);
+                let base = mrd_meta.parent().unwrap();
+                let mrd_name = mrd_meta.file_stem().unwrap().to_str().unwrap();
+                let meta_name = format!("{}_meta.txt",mrd_name);
+
+                let meta_path = base.join(&meta_name);
+                println!("meta path: {:?}",meta_path);
+                let hf = Headfile::from_mrd_meta(&meta_path);
+                let headfile = outdir.join(&format!("{}.headfile",&imgname));
+                
+                hf.write_headfile(&headfile);
             }
             Done => {/*no op*/}
+            NotInstantiated => {/* null case. This state exists for external use only */}
         }
         return vm;
     }
@@ -177,12 +201,13 @@ impl VolumeManager {
             Reconstructing => self.state = WritingOutput,
             WritingOutput => self.state = Done,
             Done => {/*no op*/}
+            NotInstantiated => {/* null case. This state exists for external use only */}
         }
         self.to_file();
     }
 
     fn fpath(workdir:&str) -> PathBuf{
-        return Path::new(workdir).join(volume_manger_filename).with_extension("toml");
+        return Path::new(workdir).join(VOLUME_MANAGER_FILENAME).with_extension("toml");
     }
 
     pub fn exists(workdir:&str) -> bool{
@@ -208,6 +233,11 @@ pub fn launch_volume_manager(workdir:&str,runno:&str,mrd:&str,phase_table:&str,v
     }
 }
 
+pub fn re_launch_volume_manager(workdir:&str) -> u32{
+    let vm = VolumeManager::open(workdir);
+    return launch_volume_manager_job(workdir,&vm.runno,&vm.mrd,&vm.phase_table,vm.mrd_vol_offset,&vm.reco_settings);
+}
+
 pub fn launch_volume_manager_job(workdir:&str,runno:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
     let wp = Path::new(&workdir);
     let this_executable = std::env::current_exe().expect("failed to resolve this exe path");
@@ -220,6 +250,20 @@ pub fn launch_volume_manager_job(workdir:&str,runno:&str,mrd:&str,phase_table:&s
     cmd.arg(phase_table);
     cmd.arg(vol_offset.to_string());
     cmd.arg(bart_settings_file);
+    let cmd = format!("{:?}",cmd);
+    let mut job = BatchScript::new(&format!("slurm-job"));
+    job.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
+    job.commands.push(cmd);
+    let job_id = job.submit(&workdir);
+    return job_id;
+}
+
+pub fn re_launch_volume_manager_job(workdir:&str) -> u32{
+    let wp = Path::new(&workdir);
+    let this_executable = std::env::current_exe().expect("failed to resolve this exe path");
+    let mut cmd = Command::new(this_executable.to_str().unwrap());
+    cmd.arg("volume-manager-relaunch");
+    cmd.arg(workdir);
     let cmd = format!("{:?}",cmd);
     let mut job = BatchScript::new(&format!("slurm-job"));
     job.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
