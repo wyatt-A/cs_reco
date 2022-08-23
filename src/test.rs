@@ -39,7 +39,7 @@ pub fn main_test_cluster(){
     let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
     //let mrd_meta_suffix = "_meta.txt";
 
-    let recon = Recon::new("grumpy","testrunno0001",vpath,"5xfad","dummyspec");
+    let mut recon = Recon::new("grumpy","testrunno0001",vpath,"5xfad","dummyspec");
 
     let cwd = recon.engine_work_dir.join(format!("{}.work",&recon.run_number));
     if !cwd.exists(){ create_dir_all(&cwd).expect("unable to create specified working directory")}
@@ -57,6 +57,8 @@ pub fn main_test_cluster(){
     let local_vpath = VolumeIndex::fetch_from(vpath,&recon.scanner.host(),cwd.to_str().unwrap());
     let ready_mrds = VolumeIndex::read_ready(&local_vpath);
     let all_mrds = VolumeIndex::read_all(&local_vpath);
+
+    recon.n_volumes = Some(all_mrds.len());
 
     let mut r = ResourceList::open(local_raw_path.to_str().unwrap());
     r.set_host(&recon.scanner.host());

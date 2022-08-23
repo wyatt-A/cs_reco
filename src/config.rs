@@ -13,6 +13,7 @@ pub struct Recon{
     pub volume_data:PathBuf,
     pub engine_work_dir:PathBuf,
     pub recon_person:String,
+    pub n_volumes:Option<usize>,
     pub scanner:Scanner,
     pub project:ProjectSettings,
 }
@@ -56,7 +57,8 @@ impl Recon{
             recon_person:whoami::username(),
             scanner:Scanner::open(scanner),
             project:ProjectSettings::open(project),
-            specimen_id:specimen_id.to_string()
+            specimen_id:specimen_id.to_string(),
+            n_volumes:None,
         };
         let s = serde_json::to_string_pretty(&r).expect("cannot serialize struct");
         utils::write_to_file(p.to_str().unwrap(),"json",&s);
