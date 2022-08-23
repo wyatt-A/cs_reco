@@ -10,17 +10,17 @@ use std::process::Command;
 use std::error::Error;
 use crate::cfl;
 use crate::headfile::Headfile;
+use crate::config::Recon;
 
 const VOLUME_MANAGER_FILENAME:&str = "volume-manager";
 
 #[derive(Deserialize, Serialize)]
 pub struct VolumeManager {
     file:String,
-    runno:String,
     mrd:String,
     phase_table:String,
     mrd_vol_offset:usize,
-    reco_settings:String,
+    reco_settings:PathBuf,
     state:VmState,
     kspace:Option<String>,
     imspace:Option<String>,
@@ -44,7 +44,7 @@ struct ScalingInfo{
 
 impl VolumeManager {
 
-    pub fn launch(workdir:&str,runno:&str,mrd:&str,phase_table:&str,vol_offset:usize,reco_settings:&str) -> VolumeManager{
+    pub fn launch(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,reco_settings:&Path) -> VolumeManager{
         if VolumeManager::exists(workdir){
             return VolumeManager::advance(workdir);
         }
@@ -52,11 +52,10 @@ impl VolumeManager {
         let vm_path_str = vm_path.into_os_string().into_string().unwrap();
         let vm = VolumeManager{
             file:vm_path_str,
-            runno:runno.to_string(),
             mrd:mrd.to_string(),
             phase_table:phase_table.to_string(),
             mrd_vol_offset:vol_offset,
-            reco_settings:reco_settings.to_string(),
+            reco_settings:reco_settings.to_owned(),
             state:VmState::Idle,
             kspace:None,
             imspace:None
@@ -105,6 +104,7 @@ impl VolumeManager {
     pub fn advance(workdir:&str) -> VolumeManager{
         use VmState::*;
         let mut vm = VolumeManager::open(workdir);
+        let mut r = Recon::open(&vm.reco_settings.to_str().unwrap()).unwrap();
         match vm.state {
             Idle => {
                 vm.advance_state();
@@ -127,7 +127,7 @@ impl VolumeManager {
                 let mrd_name = Path::new(&vm.mrd).with_extension("");
                 let mrd_name = mrd_name.file_name().unwrap().to_str().unwrap();
                 let imspace = Path::new(&workdir).join(&format!("{}_imspace",mrd_name)).with_extension("");
-                bart_pics(&kspace,imspace.to_str().unwrap(),&vm.reco_settings);
+                bart_pics(&kspace,imspace.to_str().unwrap(),&mut r.project.recon_settings);
                 vm.imspace = Some(imspace.to_str().unwrap().to_string());
                 vm.advance_state();
             }
@@ -139,7 +139,7 @@ impl VolumeManager {
                 if !outdir.exists(){create_dir_all(&outdir).expect("cannot make directory");}
                 
                 let dirname = Path::new(&vm.file).parent().unwrap().file_name().unwrap().to_str().unwrap();
-                let imgname = format!("{}_m{}",&vm.runno,dirname);
+                let imgname = format!("{}_m{}",&r.run_number,dirname);
 
                 /* if we are the first volume (up to a collection of 1000), calculate the appropriate
                 scaling for a u16 image, scale by this amount, then write to a file to inform the other volume
@@ -216,12 +216,12 @@ impl VolumeManager {
     }
 }
 
-pub fn launch_volume_manager(workdir:&str,runno:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str){
+pub fn launch_volume_manager(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,reco_settings:&Path){
     use VmState::*;
-    let mut vm = VolumeManager::launch(workdir,runno,mrd,phase_table,vol_offset,bart_settings_file);
+    let mut vm = VolumeManager::launch(workdir,mrd,phase_table,vol_offset,reco_settings);
     loop {
         let prev_state = vm.state.clone();
-        vm = VolumeManager::launch(workdir,runno,mrd,phase_table,vol_offset,bart_settings_file);
+        vm = VolumeManager::launch(workdir,mrd,phase_table,vol_offset,reco_settings);
         if prev_state == vm.state{
             break
         }
@@ -235,21 +235,20 @@ pub fn launch_volume_manager(workdir:&str,runno:&str,mrd:&str,phase_table:&str,v
 
 pub fn re_launch_volume_manager(workdir:&str) -> u32{
     let vm = VolumeManager::open(workdir);
-    return launch_volume_manager_job(workdir,&vm.runno,&vm.mrd,&vm.phase_table,vm.mrd_vol_offset,&vm.reco_settings);
+    return launch_volume_manager_job(workdir,&vm.mrd,&vm.phase_table,vm.mrd_vol_offset,&vm.reco_settings);
 }
 
-pub fn launch_volume_manager_job(workdir:&str,runno:&str,mrd:&str,phase_table:&str,vol_offset:usize,bart_settings_file:&str) -> u32{
+pub fn launch_volume_manager_job(workdir:&str,mrd:&str,phase_table:&str,vol_offset:usize,reco_settings:&Path) -> u32{
     let wp = Path::new(&workdir);
     let this_executable = std::env::current_exe().expect("failed to resolve this exe path");
     let mut cmd = Command::new(this_executable.to_str().unwrap());
     // we are giving the sbatch file our identity to call ourself
     cmd.arg("volume-manager");
     cmd.arg(workdir);
-    cmd.arg(runno);
     cmd.arg(&mrd);
     cmd.arg(phase_table);
     cmd.arg(vol_offset.to_string());
-    cmd.arg(bart_settings_file);
+    cmd.arg(reco_settings.to_str().unwrap());
     let cmd = format!("{:?}",cmd);
     let mut job = BatchScript::new(&format!("slurm-job"));
     job.options.output = wp.join("slurm-log.out").into_os_string().into_string().unwrap();
@@ -273,33 +272,33 @@ pub fn re_launch_volume_manager_job(workdir:&str) -> u32{
 }
 
 
-#[test]
-fn test(){
-    use VmState::*;
-    let bart_settings_file = "/home/waustin/vol_00/reco_settings";
-    let mrd = "/home/waustin/mrs_test_data/test_data/N20220728_00/_02_ICO61_6b0/220728T16_m00.mrd";
-    let ptab = "/home/waustin/mrs_test_data/petableCS_stream/stream_CS480_8x_pa18_pb54";
-    let workdirname = "/home/waustin/vol_00";
-    let runno = "test_runno";
-    let workdir = Path::new(workdirname);
-    if !workdir.exists(){
-        create_dir_all(workdir).expect("problem creating directory"); 
-    }
+// #[test]
+// fn test(){
+//     use VmState::*;
+//     let bart_settings_file = "/home/waustin/vol_00/reco_settings";
+//     let mrd = "/home/waustin/mrs_test_data/test_data/N20220728_00/_02_ICO61_6b0/220728T16_m00.mrd";
+//     let ptab = "/home/waustin/mrs_test_data/petableCS_stream/stream_CS480_8x_pa18_pb54";
+//     let workdirname = "/home/waustin/vol_00";
+//     let runno = "test_runno";
+//     let workdir = Path::new(workdirname);
+//     if !workdir.exists(){
+//         create_dir_all(workdir).expect("problem creating directory"); 
+//     }
 
-    let bart_settings = BartPicsSettings::quick();
-    bart_settings.to_file(bart_settings_file);
+//     let bart_settings = BartPicsSettings::quick();
+//     bart_settings.to_file(bart_settings_file);
 
-    let mut vm = VolumeManager::launch(workdirname,runno,mrd,ptab,0,bart_settings_file);
-    loop {
-        let prev_state = vm.state.clone();
-        vm = VolumeManager::launch(workdirname,runno,mrd,ptab,0,bart_settings_file);
-        if prev_state == vm.state{
-            break
-        }
-        match vm.state {
-            Done => break,
-            _ => continue
-        }
-    }
+//     let mut vm = VolumeManager::launch(workdirname,runno,mrd,ptab,0,bart_settings_file);
+//     loop {
+//         let prev_state = vm.state.clone();
+//         vm = VolumeManager::launch(workdirname,runno,mrd,ptab,0,bart_settings_file);
+//         if prev_state == vm.state{
+//             break
+//         }
+//         match vm.state {
+//             Done => break,
+//             _ => continue
+//         }
+//     }
     
-}
+// }

@@ -17,7 +17,7 @@ pub fn get_dims(path:&Path) -> Vec<usize>{
 }
 
 pub fn load_cfl_header(path:&str) -> HashMap<String,String>{
-    let s = utils::read_to_string(path, "hdr");
+    let s = utils::read_to_string(path, "hdr").expect("cannot open file");
     let mut h = HashMap::<String,String>::new();
     let lines:Vec<&str> = s.lines().collect();
     lines.iter().enumerate().for_each( |(i,line)|

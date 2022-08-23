@@ -6,10 +6,12 @@ use std::fs::{File,create_dir_all};
 use std::io::{Read,Write};
 use std::path::{Path, PathBuf};
 use whoami;
+use serde_json;
 use crate::bart_wrapper::BartPicsSettings;
 use crate::volume_manager::{VmState,VolumeManager,launch_volume_manager,launch_volume_manager_job,re_launch_volume_manager_job};
 use crate::slurm::{self,BatchScript, JobState};
 use std::process::Command;
+use crate::config::Recon;
 
 /*
     headfile=mrs_meta_data(mrd);
@@ -27,131 +29,41 @@ use std::process::Command;
     headfile.engine_work_directory = pwd;
 */
 
-#[derive(Serialize,Deserialize)]
-pub struct Recon{
-    run_number:String,
-    volume_data:PathBuf,
-    engine_work_dir:PathBuf,
-    recon_person:String,
-    scanner:Scanner,
-    project:ProjectSettings,
-    specimen_id:String
-}
-
-#[derive(Serialize,Deserialize)]
-pub struct Scanner{
-    label:String,
-    identity:Host,
-    vendor:String,
-    vol_meta_suffix:String,
-    image_code:String,
-    image_source_tag:String,
-}
-
-#[derive(Serialize,Deserialize)]
-pub struct ProjectSettings{
-    label:String,
-    project_code:String,
-    recon_settings:BartPicsSettings,
-}
-
-// Recon::new("grumpy","test_runno","/some/vol_index.txt","5xfad")
-
-impl Recon{
-    pub fn new(scanner:&str,runno:&str,vol_data:&str,project:&str,specimen_id:&str) -> Recon{
-
-        let engine_work_dir = match std::env::var("BIGGUS_DISKUS"){
-            Ok(dir) => Path::new(&dir).to_owned(),
-            Err(_) => {
-                println!("BIGGUS_DISKUS not set. Using home directory instead");
-                Path::new(&std::env::var("HOME").expect("HOME not set. Are you on a Windows?")).to_owned()
-            },
-        };
-        return Recon{
-            run_number:runno.to_string(),
-            volume_data:Path::new(vol_data).to_owned(),
-            engine_work_dir:engine_work_dir,
-            recon_person:whoami::username(),
-            scanner:Scanner::open(scanner),
-            project:ProjectSettings::open(project),
-            specimen_id:specimen_id.to_string()
-        }
-    }
-}
-
-impl ProjectSettings{
-    pub fn open(label:&str) -> ProjectSettings{
-        let str = utils::read_to_string(label,"toml");
-        return toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?");
-    }
-    pub fn new_template(label:&str){
-        let project_settings = ProjectSettings{
-            label:label.to_string(),
-            project_code:"22.project.01".to_string(),
-            recon_settings:BartPicsSettings::default(),
-        };
-        utils::write_to_file(label,"toml",&toml::to_string(&project_settings).expect("cannot serialize struct"));
-    }
-}
-
-impl Scanner {
-    pub fn open(label:&str) -> Scanner {
-        let str = utils::read_to_string(label,"toml");
-        return toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?");
-    }
-    pub fn new_template(label:&str){
-        let scanner = Scanner{
-            label:label.to_string(),
-            identity:Host::new("user","hostname"),
-            vendor:"mrsolutions".to_string(),
-            vol_meta_suffix:"_meta.txt".to_string(),
-            image_code:"t9".to_string(),
-            image_source_tag:"imx".to_string(),
-        };
-        utils::write_to_file(label,"toml",&toml::to_string(&scanner).expect("cannot serialize struct"));
-    }
-}
-
-
 pub fn main_test_cluster(){
 
-    let mut bart_settings = BartPicsSettings::quick();
-    bart_settings.set_bart_binary("bart");
-    let bart_settings_file = "/privateShares/wa41/cs_recon_test/reco_settings";
-    let scanner = Host::new("mrs","stejskal");
-    let runno = "testrunno";
-    let big_disk = "/privateShares/wa41/cs_recon_test";
+    //let mut bart_settings = BartPicsSettings::quick();
+    //bart_settings.set_bart_binary("bart");
+    //let bart_settings_file = "/privateShares/wa41/cs_recon_test/reco_settings";
+    //let scanner = Host::new("mrs","stejskal");
     let ptab = "/home/wa41/cs_recon_test/stream_CS256_8x_pa18_pb54";
     let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
-    let mrd_meta_suffix = "_meta.txt";
+    //let mrd_meta_suffix = "_meta.txt";
 
-    // let recon_meta = ReconMeta{
-    // }
-    
-    let base_dir = Path::new(big_disk);
-    let cwd = base_dir.join(format!("{}.work",runno));
+    let recon = Recon::new("grumpy","testrunno0001",vpath,"5xfad","dummyspec");
+
+    let cwd = recon.engine_work_dir.join(format!("{}.work",&recon.run_number));
     if !cwd.exists(){ create_dir_all(&cwd).expect("unable to create specified working directory")}
     
     let volman_jobs_file = cwd.join("volume-manager-jobs").with_extension("toml");
 
     let mrd_vol_offset = 0;
     
-    bart_settings.to_file(bart_settings_file);
+    //bart_settings.to_file(bart_settings_file);
 
     let raw_base_path = Path::new(vpath).parent().unwrap();
     let local_raw_path = Path::new(&cwd).join("raw");
     if !local_raw_path.exists(){create_dir_all(&local_raw_path).expect("issue creating directory");}
     
-    let local_vpath = VolumeIndex::fetch_from(vpath,&scanner,cwd.to_str().unwrap());
+    let local_vpath = VolumeIndex::fetch_from(vpath,&recon.scanner.host(),cwd.to_str().unwrap());
     let ready_mrds = VolumeIndex::read_ready(&local_vpath);
     let all_mrds = VolumeIndex::read_all(&local_vpath);
 
     let mut r = ResourceList::open(local_raw_path.to_str().unwrap());
-    r.set_host(&scanner);
+    r.set_host(&recon.scanner.host());
     ready_mrds.iter().for_each(|(mrd,_)| {
         let mrdname = Path::new(mrd).file_stem().unwrap().to_str().unwrap();
         let mrd_srcpath = Path::new(raw_base_path).join(mrd);
-        let meta_srcpath = Path::new(raw_base_path).join(format!("{}{}",mrdname,mrd_meta_suffix));
+        let meta_srcpath = Path::new(raw_base_path).join(format!("{}{}",mrdname,&recon.scanner.vol_meta_suffix));
         r.try_add(Resource::new(mrd_srcpath.to_str().unwrap(),""));
         r.try_add(Resource::new(meta_srcpath.to_str().unwrap(),""));
     });
@@ -165,7 +77,7 @@ pub fn main_test_cluster(){
     println!("looking for {:?} ...",volman_jobs_file);
     if volman_jobs_file.exists(){
         println!("loading jobs ...");
-        let s = utils::read_to_string(volman_jobs_file.to_str().unwrap(),"toml");
+        let s = utils::read_to_string(volman_jobs_file.to_str().unwrap(),"toml").expect("cannot open file");
         vol_man_jobs = toml::from_str(&s).expect("cannot deserialize hash");
     }
     else{
@@ -185,7 +97,7 @@ pub fn main_test_cluster(){
         if !VolumeManager::exists(voldir.to_str().unwrap()) && mrd.is_some(){
             println!("vol man doesn't exist and mrd is available... submitting new job");
             let mrd_path = local_raw_path.join(mrd.clone().unwrap());
-            let job_id = launch_volume_manager_job(voldir.to_str().unwrap(),runno,mrd_path.to_str().unwrap(),&ptab,mrd_vol_offset,&bart_settings_file);
+            let job_id = launch_volume_manager_job(voldir.to_str().unwrap(),mrd_path.to_str().unwrap(),&ptab,mrd_vol_offset,&recon.path());
             vol_man_jobs.insert(voldir.clone(),job_id);
         }
     });
@@ -255,4 +167,8 @@ pub fn main_test_cluster(){
     // }
     
 }
-    
+
+#[test]
+fn test(){
+    let r = Recon::new("grumpy","N60400","some/data","5xfad","220304");
+}

@@ -1,0 +1,11 @@
+label = "5xfad"
+project_code = "20.5xfad.01"
+
+[recon_settings]
+bart_binary = "bart"
+max_iter = 2
+algorithm = "l1"
+respect_scaling = true
+regularization = 0.005
+debug = true
+coil_sensitivity = ""

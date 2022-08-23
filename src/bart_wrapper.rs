@@ -49,7 +49,7 @@ impl BartPicsSettings{
     }
 
     pub fn from_file(src_path:&str) -> BartPicsSettings{
-        let s = utils::read_to_string(src_path,"toml");
+        let s = utils::read_to_string(src_path,"toml").expect("cannot open file");
         return toml::from_str(&s).expect("cannot deserialize file");
     }
 
@@ -108,11 +108,10 @@ impl BartPicsSettings{
     }
 }
 
-pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,bart_pics_settings:&str){
+pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,settings:&mut BartPicsSettings){
 
     let kspace_cfl_path = Path::new(&kspace_cfl);
     
-    let mut settings = BartPicsSettings::from_file(bart_pics_settings);
     let sens_path = Path::new(&settings.coil_sensitivity);
     // reference coil sensitivity data if exist and is correct, make fresh if otherwise
     if settings.coil_sensitivity.is_empty(){
@@ -124,8 +123,8 @@ pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,bart_pics_settings:&str){
             settings.set_unit_sens_from_cfl(kspace_cfl);
         }
     }
-    settings.to_file(bart_pics_settings);
-    let mut cmd = Command::new(settings.bart_binary);
+    //settings.to_file(bart_pics_settings);
+    let mut cmd = Command::new(&settings.bart_binary);
     let scale = if settings.respect_scaling { "-S" } else { "" };
     let debug = if settings.debug {"-d5"} else {""};
     cmd.arg("pics");
@@ -149,7 +148,7 @@ pub fn bart_pics(kspace_cfl:&str,img_cfl:&str,bart_pics_settings:&str){
 fn test(){
     // configure BartPicsSettings
     let p = "./def_recon";
-    let s = BartPicsSettings::quick();
+    let mut s = BartPicsSettings::quick();
     s.to_file(p);
     let mut r_settings = BartPicsSettings::from_file(p);
     r_settings.set_bart_binary("/home/wyatt/bart-0.7.00/bart");
@@ -159,6 +158,6 @@ fn test(){
     "0", "/home/wyatt/petableCS_stream/stream_CS480_8x_pa18_pb54",
     "480", "./test_cfl");
 
-    bart_pics("./test_cfl","./img_cfl",p);
+    bart_pics("./test_cfl","./img_cfl",&mut s);
 
 }

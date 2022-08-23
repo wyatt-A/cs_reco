@@ -1,0 +1,7 @@
+label = "grumpy"
+username = "mrs"
+hostname = "stejskal"
+vendor = "mrsolutions"
+vol_meta_suffix = "_meta.txt"
+image_code = "t9"
+image_source_tag = "imx"

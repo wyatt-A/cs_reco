@@ -1,157 +1,135 @@
+use crate::utils;
 use serde::{Deserialize, Serialize};
-use std::path::{Path,PathBuf};
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use toml;
+use std::path::{Path, PathBuf};
 use whoami;
+use serde_json;
+use crate::bart_wrapper::BartPicsSettings;
+use crate::resource::Host;
 
-const RC_FNAME:&str = "ResourceConfig";
-const RF_PATH:&str = ".";
-
-/*
-Things we only need to set up occasionally. These things should't be chaning all the time
-In short, where the data lives on the network (essentially scanner settings)
-*/ 
-#[derive(Debug,Deserialize,Serialize)]
-pub struct ResourceConfig{
-    pub remote_host:String,
-    pub remote_user:String,
-    pub remote_base_path:String,
-}
-
-/*
-Things we need to pay attention to every time a recon is launched
-*/ 
-#[derive(Debug,Deserialize,Serialize)]
-pub struct ReconForm {
+#[derive(Serialize,Deserialize,Debug)]
+pub struct Recon{
     pub run_number:String,
-    pub relative_index_file_path:String,
-    pub relative_mrd_path:String,
+    pub specimen_id:String,
+    pub volume_data:PathBuf,
+    pub engine_work_dir:PathBuf,
+    pub recon_person:String,
+    pub scanner:Scanner,
+    pub project:ProjectSettings,
 }
 
-/*
-Things that don't typically change for a given project/imaging protocol (but can)
-*/
-pub struct ReconProtocol {
+#[derive(Serialize,Deserialize,Debug)]
+pub struct Scanner{
+    pub label:String,
+    pub username:String,
+    pub hostname:String,
+    pub vendor:String,
+    pub vol_meta_suffix:String,
+    pub image_code:String,
+    pub image_source_tag:String,
+}
+
+#[derive(Serialize,Deserialize,Debug)]
+pub struct ProjectSettings{
+    pub label:String,
     pub project_code:String,
-    pub recon_settings:ReconSettings,
+    pub recon_settings:BartPicsSettings,
 }
 
-pub struct ReconSettings {
-    // things that determine how recon is performed
-}
+// Recon::new("grumpy","test_runno","/some/vol_index.txt","5xfad")
 
-impl ResourceConfig {
-    fn template() -> ResourceConfig{
-        return ResourceConfig { 
-            remote_host:String::new(),
-            remote_user:String::new(),
-            remote_base_path:String::new(),
-        }
-    }
+impl Recon{
+    pub fn new(scanner:&str,runno:&str,vol_data:&str,project:&str,specimen_id:&str) -> Recon{
 
-    pub fn new(remote_host:&str,remote_user:&str,remote_base_path:&str) -> ResourceConfig {
-        return ResourceConfig{
-            remote_host:remote_host.to_string(),
-            remote_user:remote_user.to_string(),
-            remote_base_path:remote_base_path.to_string()
+        let p = Path::new(runno).with_extension("json").to_owned();
+        
+        let engine_work_dir = match std::env::var("BIGGUS_DISKUS"){
+            Ok(dir) => Path::new(&dir).to_owned(),
+            Err(_) => {
+                println!("BIGGUS_DISKUS not set. Using home directory instead");
+                Path::new(&std::env::var("HOME").expect("HOME not set. Are you on a Windows?")).to_owned()
+            },
         };
-    }
-
-    pub fn save(&self,filepath:&str){
-        let p = Path::new(filepath).to_owned().with_extension("toml");
-        let mut f = File::create(p).expect("cannot create file");
-        let str = toml::to_string(&self).expect("cannot serialize data struct");
-        f.write_all(str.as_bytes()).expect("issue writing to file");
-    }
-
-    fn fullpath() -> PathBuf{
-        let p = Path::new("./");
-        return p.with_file_name(RC_FNAME).with_extension("toml");
-    }
-
-    pub fn create_template(){
-        if ResourceConfig::fullpath().exists() {
-            println!("Config already exists. Will not overwrite.");
-            return;
-        }
-        let mut f = File::create(ResourceConfig::fullpath()).expect("cannot create file");
-        let rct = ResourceConfig::template();
-        let str = toml::to_string(&rct).expect("cannot serialize data struct");
-        f.write_all(str.as_bytes()).expect("issue writing to file");
-    }
-
-    pub fn from_toml(filename:&str) -> ResourceConfig{
-        let mut f = File::open(filename).expect("cannot open file");
-        let mut str = String::new();
-        f.read_to_string(&mut str).expect("issue reading file");
-        let r:ResourceConfig = toml::from_str(&str).expect("cannot deserialize. Is the file improperly formatted?");
+        let r = Recon{
+            run_number:runno.to_string(),
+            volume_data:Path::new(vol_data).to_owned(),
+            engine_work_dir:engine_work_dir,
+            recon_person:whoami::username(),
+            scanner:Scanner::open(scanner),
+            project:ProjectSettings::open(project),
+            specimen_id:specimen_id.to_string()
+        };
+        let s = serde_json::to_string_pretty(&r).expect("cannot serialize struct");
+        utils::write_to_file(p.to_str().unwrap(),"json",&s);
         return r;
     }
 
-    pub fn is_complete(&self) -> bool{
-        return !(
-            self.remote_user.is_empty() ||
-            self.remote_host.is_empty() ||
-            self.remote_base_path.is_empty()
-        );
+    pub fn open(runno:&str) -> Option<Recon>{
+        let p = Path::new(runno).with_extension("json").to_owned();
+        match p.exists(){
+            true =>{
+                let s = utils::read_to_string(p.to_str().unwrap(),"json").expect("what happened to the file??");
+                return serde_json::from_str(&s).expect("cannot deserialize json file. It is likely corrupted!");
+            },
+            false => {
+                println!("recon runno {} doesn't exist. Use new to create one",runno);
+                return None;
+            }
+        }
+    }
+
+    pub fn path(&self) -> PathBuf{
+        return Path::new(&self.run_number).with_extension("json");
     }
 
 }
 
-impl ReconForm {
-    pub fn template() -> ReconForm{
-        return ReconForm { 
-            run_number:String::new(),
-            relative_index_file_path:String::new(),
-            relative_mrd_path:String::new(),
+impl ProjectSettings{
+    pub fn open(label:&str) -> ProjectSettings{
+        //let str = utils::read_to_string(label,"toml");
+        return match utils::read_to_string(label,"toml"){
+            Ok(str) => toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?"),
+            Err(_) => {
+                println!("Project settings not found, creating a default template.");
+                ProjectSettings::new_template(label)}
         }
     }
-
-    pub fn new(run_number:&str,index_path:&str) -> ReconForm{
-        let p = Path::new(RF_PATH).to_owned();
-        let mut r =  ReconForm::template();
-        r.run_number = run_number.to_string();
-        r.relative_index_file_path = index_path.to_string();
-        let s = toml::to_string(&r).expect("cannot serialize data struct");
-        let full = p.with_file_name(run_number).with_extension("toml");
-        if !full.exists(){
-            let mut f = File::create(full).expect("cannot create file");
-            f.write_all(s.as_bytes()).expect("trouble writing to file");
-        }else{
-            println!("file {} already exists. Will not overwrite.",full.to_str().unwrap())
-        }
-        return r;
-    }
-
-    pub fn from_toml(filename:&str) -> ReconForm{
-        let mut f = File::open(filename).expect("cannot open file");
-        let mut str = String::new();
-        f.read_to_string(&mut str).expect("issue reading file");
-        let r:ReconForm = toml::from_str(&str).expect("cannot deserialize. Is the file improperly formatted?");
-        return r;
-    }
-
-    pub fn save(&self,filepath:&str){
-        let p = Path::new(filepath).to_owned().with_extension("toml");
-        let mut f = File::create(p).expect("cannot create file");
-        let str = toml::to_string(&self).expect("cannot serialize data struct");
-        f.write_all(str.as_bytes()).expect("issue writing to file");
+    pub fn new_template(label:&str) -> ProjectSettings{
+        let project_settings = ProjectSettings{
+            label:label.to_string(),
+            project_code:"22.project.01".to_string(),
+            recon_settings:BartPicsSettings::default(),
+        };
+        utils::write_to_file(label,"toml",&toml::to_string(&project_settings).expect("cannot serialize struct"));
+        return project_settings;
     }
 }
 
-#[test]
-fn recon_form_test(){
-    // ReconForm::new(
-    //     "N60tacos01",
-    //     "N20220804_00/_02_ICO61_6b0/volume_index.txt",
-    //     "22.tacos.01"
-    // );
+impl Scanner {
+    pub fn open(label:&str) -> Scanner {
+        return match utils::read_to_string(label,"toml"){
+            Ok(str) => toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?"),
+            Err(_) => {
+                print!("Scanner settings not found. Creating a template.");
+                return Scanner::new_template(label);
+            }
+        }
+    }
+    pub fn new_template(label:&str) -> Scanner{
+        let scanner = Scanner{
+            label:label.to_string(),
+            vendor:"mrsolutions".to_string(),
+            vol_meta_suffix:"_meta.txt".to_string(),
+            image_code:"t9".to_string(),
+            image_source_tag:"imx".to_string(),
+            username:"user".to_string(),
+            hostname:"hostname".to_string(),
+        };
+        let s = toml::to_string(&scanner).expect("cannot serialize struct");
+        utils::write_to_file(label,"toml",&s);
+        return scanner;
+    }
 
-    // let r = ResourceConfig::new("stejskal","mrs","/d/smis");
-    // r.save("./Grumpy");
-
-
-    //let r = ResourceConfig::import("./Grumpy.toml");
-
+    pub fn host(&self) -> Host{
+        Host::new(&self.username,&self.hostname)
+    }
 }

@@ -5,6 +5,7 @@
 use cs_reco::volume_manager::{launch_volume_manager,re_launch_volume_manager};
 use cs_reco::test::{main_test_cluster};
 use clap::Parser;
+use std::path::Path;
 
 /*
     Main entry point for arguments: looking for a sub-command and their args
@@ -24,11 +25,10 @@ struct Args{
 struct VolumeManagerArgs{
     parent:String,
     working_directory:String,
-    runno:String,
     mrd_file:String,
     phase_encode_stream_table:String,
     volume_offset:usize,
-    bart_settings_file:String
+    reco_settings_json:String
 }
 
 #[derive(Parser, Debug)]
@@ -56,11 +56,10 @@ fn main(){
             let a = VolumeManagerArgs::parse();
             launch_volume_manager(
                 &a.working_directory,
-                &a.runno,
                 &a.mrd_file,
                 &a.phase_encode_stream_table,
                 a.volume_offset,
-                &a.bart_settings_file
+                &Path::new(&a.reco_settings_json)
             );
         }
         "volume-manager-relaunch" => {

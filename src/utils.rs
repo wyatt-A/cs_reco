@@ -2,13 +2,13 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{Write, Read};
 
-pub fn read_to_string(filepath:&str,extension:&str) -> String{
+pub fn read_to_string(filepath:&str,extension:&str) -> std::io::Result<String>{
     let p = Path::new(filepath);
     let p = p.with_extension(extension);
-    let mut f = File::open(p).expect("cannot open file. Check that the path is valid");
+    let mut f = File::open(p)?;
     let mut s = String::new();
     f.read_to_string(&mut s).expect("trouble reading file");
-    return s;
+    return Ok(s);
 }
 
 pub fn write_to_file(filepath:&str,extension:&str,string:&str){
