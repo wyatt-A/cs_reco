@@ -1,12 +1,116 @@
 use crate::{resource::*, utils};
 use crate::volume_index::VolumeIndex;
 use std::collections::{HashMap, HashSet};
-use std::fs::create_dir_all;
+use serde::{Deserialize, Serialize};
+use std::fs::{File,create_dir_all};
+use std::io::{Read,Write};
 use std::path::{Path, PathBuf};
+use whoami;
 use crate::bart_wrapper::BartPicsSettings;
 use crate::volume_manager::{VmState,VolumeManager,launch_volume_manager,launch_volume_manager_job,re_launch_volume_manager_job};
 use crate::slurm::{self,BatchScript, JobState};
 use std::process::Command;
+
+/*
+    headfile=mrs_meta_data(mrd);
+    headfile.dti_vols = n_volumes;
+    headfile.U_code = project_code;
+    headfile.U_civmid = civm_userid;
+    headfile.U_specid = specimen_id;
+    headfile.scanner_vendor = scanner_vendor;
+    headfile.U_runno = strcat(run_number,'_',mnum);
+    headfile.dim_X = vol_size(1);
+    headfile.dim_Y = vol_size(2);
+    headfile.dim_Z = vol_size(3);
+    headfile.civm_image_code = 't9';
+    headfile.civm_image_source_tag = 'imx';
+    headfile.engine_work_directory = pwd;
+*/
+
+#[derive(Serialize,Deserialize)]
+pub struct Recon{
+    run_number:String,
+    volume_data:PathBuf,
+    engine_work_dir:PathBuf,
+    recon_person:String,
+    scanner:Scanner,
+    project:ProjectSettings,
+    specimen_id:String
+}
+
+#[derive(Serialize,Deserialize)]
+pub struct Scanner{
+    label:String,
+    identity:Host,
+    vendor:String,
+    vol_meta_suffix:String,
+    image_code:String,
+    image_source_tag:String,
+}
+
+#[derive(Serialize,Deserialize)]
+pub struct ProjectSettings{
+    label:String,
+    project_code:String,
+    recon_settings:BartPicsSettings,
+}
+
+// Recon::new("grumpy","test_runno","/some/vol_index.txt","5xfad")
+
+impl Recon{
+    pub fn new(scanner:&str,runno:&str,vol_data:&str,project:&str,specimen_id:&str) -> Recon{
+
+        let engine_work_dir = match std::env::var("BIGGUS_DISKUS"){
+            Ok(dir) => Path::new(&dir).to_owned(),
+            Err(_) => {
+                println!("BIGGUS_DISKUS not set. Using home directory instead");
+                Path::new(&std::env::var("HOME").expect("HOME not set. Are you on a Windows?")).to_owned()
+            },
+        };
+        return Recon{
+            run_number:runno.to_string(),
+            volume_data:Path::new(vol_data).to_owned(),
+            engine_work_dir:engine_work_dir,
+            recon_person:whoami::username(),
+            scanner:Scanner::open(scanner),
+            project:ProjectSettings::open(project),
+            specimen_id:specimen_id.to_string()
+        }
+    }
+}
+
+impl ProjectSettings{
+    pub fn open(label:&str) -> ProjectSettings{
+        let str = utils::read_to_string(label,"toml");
+        return toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?");
+    }
+    pub fn new_template(label:&str){
+        let project_settings = ProjectSettings{
+            label:label.to_string(),
+            project_code:"22.project.01".to_string(),
+            recon_settings:BartPicsSettings::default(),
+        };
+        utils::write_to_file(label,"toml",&toml::to_string(&project_settings).expect("cannot serialize struct"));
+    }
+}
+
+impl Scanner {
+    pub fn open(label:&str) -> Scanner {
+        let str = utils::read_to_string(label,"toml");
+        return toml::from_str(&str).expect("Cannot deserialize file. Is it the correct format?");
+    }
+    pub fn new_template(label:&str){
+        let scanner = Scanner{
+            label:label.to_string(),
+            identity:Host::new("user","hostname"),
+            vendor:"mrsolutions".to_string(),
+            vol_meta_suffix:"_meta.txt".to_string(),
+            image_code:"t9".to_string(),
+            image_source_tag:"imx".to_string(),
+        };
+        utils::write_to_file(label,"toml",&toml::to_string(&scanner).expect("cannot serialize struct"));
+    }
+}
 
 
 pub fn main_test_cluster(){
@@ -20,6 +124,9 @@ pub fn main_test_cluster(){
     let ptab = "/home/wa41/cs_recon_test/stream_CS256_8x_pa18_pb54";
     let vpath = "/d/smis/recon_test_data/_01_46_3b0/volume_index.txt";
     let mrd_meta_suffix = "_meta.txt";
+
+    // let recon_meta = ReconMeta{
+    // }
     
     let base_dir = Path::new(big_disk);
     let cwd = base_dir.join(format!("{}.work",runno));
