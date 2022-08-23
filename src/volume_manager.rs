@@ -210,7 +210,7 @@ impl VolumeManager {
                 }
                 hf.append_field("dim_X", dims[0]);
                 hf.append_field("dim_Y", dims[1]);
-                hf.append_field("dim_Z", dims[3]);
+                hf.append_field("dim_Z", dims[2]);
                 hf.append_field("U_code", &r.project.project_code);
                 hf.append_field("U_code", &r.project.project_code);
                 hf.append_field("U_civmid",&r.recon_person);
