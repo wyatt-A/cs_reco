@@ -16,7 +16,8 @@ pub struct BartPicsSettings{
     respect_scaling:bool,
     regularization:f32,
     debug:bool,
-    coil_sensitivity:String
+    coil_sensitivity:String,
+    pub image_scale_histo_percent:f64
 }
 
 impl BartPicsSettings{
@@ -28,7 +29,8 @@ impl BartPicsSettings{
             respect_scaling:true,
             regularization:0.005,
             debug:true,
-            coil_sensitivity:"".to_string()
+            coil_sensitivity:"".to_string(),
+            image_scale_histo_percent:0.9995
         }
     }
 

@@ -151,7 +151,7 @@ impl VolumeManager {
                 match dirname {
                     "0"|"00"|"000" => {
                         let imspace = vm.imspace.clone().unwrap();
-                        let scale = cfl::find_u16_scale(Path::new(&imspace),0.9995);
+                        let scale = cfl::find_u16_scale(Path::new(&imspace),r.project.recon_settings.image_scale_histo_percent);
                         let s = ScalingInfo{histo_percent:0.9995,scale_factor:scale};
                         let mut f = File::create(img_scale_file).expect("cannot create file");
                         let str = toml::to_string(&s).expect("cannot deserialize struct");
