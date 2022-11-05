@@ -116,7 +116,7 @@ pub fn main_test_cluster(){
     });
 
     /*
-        If for some reason a volume manager cannot advance state (commonly becasue it is waiting for
+        If for some reason a volume manager cannot advance state (commonly because it is waiting for
         image scaling information from volume 00), it will return and the slurm state will say "completed."
         In this case, we need to check for inactivity of volume managers that still have work to do. If this is
         the case, we need to restart them, returning a new slurm job id to track
